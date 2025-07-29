@@ -1,45 +1,77 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>SMC BTC/USDT Live Chart</title>
-  <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BOT SMC M15 + M1 Bitget BTC/USDT</title>
   <style>
-    body { font-family: Arial, sans-serif; }
-    #chart { width: 100%; height: 600px; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #121212;
+      color: #eee;
+      padding: 20px;
+      max-width: 700px;
+      margin: auto;
+    }
+    h1 {
+      color: #4CAF50;
+      text-align: center;
+    }
+    #log {
+      background: #222;
+      border-radius: 8px;
+      padding: 15px;
+      height: 400px;
+      overflow-y: scroll;
+      font-family: monospace;
+      white-space: pre-wrap;
+      margin-top: 20px;
+    }
+    .signal {
+      color: #4caf50;
+      font-weight: bold;
+    }
+    .error {
+      color: #ff5252;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
-  <h2>📈 BTC/USDT SMC Live Chart</h2>
-  <div id="chart"></div>
-  <script>
-    const chart = LightweightCharts.createChart(document.getElementById('chart'), {
-      layout:{backgroundColor:'#fff', textColor:'#000'},
-      grid:{vertLines:{color:'#eee'},horzLines:{color:'#eee'}},
-      timeScale:{timeVisible:true, secondsVisible:false}
-    });
-    const series = chart.addCandlestickSeries();
+  <h1>🚀 BOT SMC M15 + M1 Bitget BTC/USDT</h1>
+  <div id="log">Démarrage du bot...\n</div>
 
-    async function fetchData(){
-      const res = await fetch('http://localhost:8000/api/data');
-      const {candles, signals} = await res.json();
-      series.setData(candles);
-      signals.forEach(sig=>{
-        chart.addShape({
-          time: sig.time,
-          price: sig.entry,
-          shape: sig.direction==='long'?'arrow_up':'arrow_down',
-          color: sig.direction==='long'?'green':'red',
-          text: sig.direction.toUpperCase()
-        });
-        chart.addPriceLine({price: sig.ob_zone[0], color:'blue', lineWidth:1, lineStyle:2, title:'OB low'});
-        chart.addPriceLine({price: sig.ob_zone[1], color:'blue', lineWidth:1, lineStyle:2, title:'OB high'});
-        chart.addPriceLine({price: sig.fvg_zone[0], color:'orange', lineWidth:1, title:'FVG high'});
-        chart.addPriceLine({price: sig.fvg_zone[1], color:'orange', lineWidth:1, title:'FVG low'});
-      });
+  <script>
+    // Simule des messages de log comme le bot python
+    const logDiv = document.getElementById('log');
+
+    // Exemple de fonction pour ajouter un message
+    function addLog(message, type='') {
+      const span = document.createElement('span');
+      span.textContent = message + '\n';
+      if (type === 'signal') span.classList.add('signal');
+      if (type === 'error') span.classList.add('error');
+      logDiv.appendChild(span);
+      logDiv.scrollTop = logDiv.scrollHeight;
     }
-    fetchData();
-    setInterval(fetchData,15000);
+
+    // Simuler des signaux toutes les 10 secondes (exemple)
+    const signals = [
+      "✅ 2025-07-29 14:00 - SIGNAL LONG validé (Tendance M15: BULLISH)\nEntrée : 30000\nSL : 29950\nTP1 (1:1) : 30050\nTP2 (Liquidity Pool) : 30200",
+      "✅ 2025-07-29 14:10 - SIGNAL SHORT validé (Tendance M15: BEARISH)\nEntrée : 29800\nSL : 29850\nTP1 (1:1) : 29750\nTP2 (Liquidity Pool) : 29500",
+      "⚠️ Erreur: Connexion perdue à l'API"
+    ];
+    let i = 0;
+
+    setInterval(() => {
+      if (i >= signals.length) i = 0;
+      const msg = signals[i];
+      if (msg.startsWith('✅')) addLog(msg, 'signal');
+      else if (msg.startsWith('⚠️')) addLog(msg, 'error');
+      else addLog(msg);
+      i++;
+    }, 10000);
+
   </script>
 </body>
 </html>
