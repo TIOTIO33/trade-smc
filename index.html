@@ -26,6 +26,7 @@
       font-family: monospace;
       white-space: pre-wrap;
       margin-top: 20px;
+      border: 1px solid #4caf50;
     }
     .signal {
       color: #4caf50;
@@ -42,10 +43,8 @@
   <div id="log">Démarrage du bot...\n</div>
 
   <script>
-    // Simule des messages de log comme le bot python
     const logDiv = document.getElementById('log');
 
-    // Exemple de fonction pour ajouter un message
     function addLog(message, type='') {
       const span = document.createElement('span');
       span.textContent = message + '\n';
@@ -55,7 +54,6 @@
       logDiv.scrollTop = logDiv.scrollHeight;
     }
 
-    // Simuler des signaux toutes les 10 secondes (exemple)
     const signals = [
       "✅ 2025-07-29 14:00 - SIGNAL LONG validé (Tendance M15: BULLISH)\nEntrée : 30000\nSL : 29950\nTP1 (1:1) : 30050\nTP2 (Liquidity Pool) : 30200",
       "✅ 2025-07-29 14:10 - SIGNAL SHORT validé (Tendance M15: BEARISH)\nEntrée : 29800\nSL : 29850\nTP1 (1:1) : 29750\nTP2 (Liquidity Pool) : 29500",
@@ -71,7 +69,6 @@
       else addLog(msg);
       i++;
     }, 10000);
-
   </script>
 </body>
 </html>
