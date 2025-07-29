@@ -1,21 +1,17 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <title>SMC Trading Bot - BTC/USDT (Binance Live)</title>
+  <meta charset="UTF-8">
+  <title>SMC TradingView-Like Dashboard (Binance Live)</title>
   <style>
     body { margin:0; background:#f5f7fa; font-family:sans-serif;}
-    .dashboard-main { width:100vw; height:100vh; display:flex; background:#f5f7fa;}
-    .left-panel { flex:1; display:flex;align-items:center;justify-content:center; background:#fff;}
-    .central-panel { flex:2.2;background:#eef3fa;display:flex;flex-direction:column;justify-content:center;padding:50px 16px 20px 16px;}
-    .chart-area { background:#fff;border-radius:10px;padding:28px 16px; box-shadow:0 2px 8px #eaeaea;}
-    .price-box { font-size:2.5em;color:#33cc66;font-weight:700;text-align:center;letter-spacing:2px;margin-bottom:18px;transition:.2s;}
-    .live-dot { display:inline-block; width:12px;height:12px;border-radius:50%; background:#3acc3a;animation:blink .8s infinite alternate;vertical-align:middle;margin-right:8px;}
-    @keyframes blink{ to { opacity:.3; } }
-    .right-panel { flex:1; background:#fff;display:flex;flex-direction:column;gap:18px;padding:32px 16px;box-shadow:-2px 0 10px #ececec;min-width:320px; max-width:400px; height:100vh;overflow-y:auto;}
-    .panel { margin-bottom:14px;background:#f6f9fb;padding:18px 12px;border-radius:10px;box-shadow:0 2px 6px #e8e8e8;}
-    .panel-title { color:#234; font-weight: bold; margin-bottom:9px;font-size:1.07em;text-transform:uppercase;}
-    .kpi-row { display:flex; justify-content:space-between;margin-bottom:5px; }
+    .dashboard-main { width:100vw; height:100vh; display:flex;}
+    .central-panel { flex:2; background:#eff3f9; display:flex; flex-direction:column; justify-content:center; align-items:center;}
+    .chart-area { background:#fff; border-radius:10px; padding:16px; box-shadow:0 2px 8px #eaeaea; margin:30px; }
+    .right-panel { flex:1; background:#fff; height:100vh; padding:30px 18px; box-shadow:-2px 0 10px #ececec;}
+    .panel { margin-bottom:18px; background:#f6f9fb; padding:18px 12px; border-radius:10px; }
+    .panel-title { color:#234; font-weight: bold; margin-bottom:11px;font-size:1.07em;text-transform:uppercase;}
+    .kpi-row { display:flex; justify-content:space-between;margin-bottom:5px;}
     .kpi-label {color:#666;}
     .kpi-value {font-weight:700;}
     .kpi-value.green {color:#33cc66;}
@@ -24,19 +20,17 @@
     @media (max-width:1000px){
       .dashboard-main{flex-direction:column;}
       .right-panel{width:100vw;max-width:unset;height:auto;box-shadow:none;}
-      .central-panel{padding:16px;}
+      .central-panel{padding:0;}
     }
   </style>
+  <!-- Librairie TradingView Lightweight Charts -->
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
   <div class="dashboard-main">
-    <div class="left-panel">
-      <img src="https://img.icons8.com/external-flatarticons-blue-flatarticons/120/000000/external-bitcoin-fintech-flatarticons-blue-flatarticons.png" style="width:90px;opacity:.75;">
-    </div>
     <div class="central-panel">
       <div class="chart-area">
-        <div id="price" class="price-box">Chargement...</div>
-        <canvas id="priceChart" height="180" style="width:100%;max-width:700px;margin:0 auto;display:block;"></canvas>
+        <div id="tvchart" style="width:720px; height:400px;"></div>
       </div>
     </div>
     <div class="right-panel">
@@ -64,148 +58,145 @@
     </div>
   </div>
   <script>
-    // --- Mini Chart sans dépendance externe ---
-    const priceChart = document.getElementById('priceChart');
-    const pctx = priceChart.getContext('2d');
-    let priceBuffer = [], maxPrices = 40;
-    function drawChart(arr) {
-      pctx.clearRect(0,0,priceChart.width,priceChart.height);
-      if (arr.length<3) return;
-      let min = Math.min(...arr), max = Math.max(...arr);
-      let w = priceChart.width, h = priceChart.height;
-      let stepX = w/(arr.length-1);
-      pctx.beginPath();
-      pctx.moveTo(0, h - (arr[0]-min)/(max-min)*h);
-      for (let i=1;i<arr.length;i++)
-        pctx.lineTo(i*stepX, h - (arr[i]-min)/(max-min)*h);
-      pctx.strokeStyle="#33cc66"; pctx.lineWidth=4;
-      pctx.stroke();
-      // Fill under
-      pctx.lineTo(w,h); pctx.lineTo(0,h); pctx.closePath();
-      pctx.globalAlpha=0.08;pctx.fillStyle="#33cc66";pctx.fill();pctx.globalAlpha=1;
-    }
+    // Initialisation du graphique TradingView-Like
+    const chart = LightweightCharts.createChart(document.getElementById('tvchart'), {
+      width: 700, height: 390, layout: { background: { type:'Solid', color:'#fff'}, textColor:'#223'}, 
+      grid: { vertLines: { color:'#eff3f9' }, horzLines: { color:'#eff3f9' } },
+      crosshair: { mode:1 },
+      rightPriceScale: { borderColor:'#ccc' },
+      timeScale: { borderColor:'#ccc', timeVisible:true, secondsVisible:false },
+    });
+    const candleSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#e96d76', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#e96d76' });
 
-    // --- Logique SMC simplifiée JS ---
-    let candlesM1 =[], candlesM15=[];
-    function addCandle(buffer, c){ buffer.push(c); if(buffer.length > 100) buffer.shift(); }
-    function getStructureM15(candles){
-      let s=[];for(let i=1;i<candles.length;i++){
-        let prev=candles[i-1], curr=candles[i];
-        if (curr.high > prev.high && curr.low > prev.low) s.push('HH');
-        else if (curr.low > prev.low && curr.high < prev.high) s.push('HL');
-        else if (curr.high < prev.high && curr.low < prev.low) s.push('LL');
-        else if (curr.high < prev.high && curr.low > prev.low) s.push('LH');
-        else s.push('N');
-      }
-      return s;
-    }
-    function detectTrendM15(candles){
-      let s = getStructureM15(candles);
-      if (s.length<3) return 'neutre';
-      let l=s.length-1, prev1=s[l-1], prev2=s[l-2];
-      if (prev2==='HL'&&prev1==='HH'&&s[l]==='HH') return 'bullish';
-      if (prev2==='LH'&&prev1==='LL'&&s[l]==='LL') return 'bearish';
-      if (s[l]==='HL'&&prev1==='LH') return 'bullish';
-      if (s[l]==='LH'&&prev1==='HL') return 'bearish';
-      return 'neutre';
-    }
-    function detectSweep(candles,lookback=5){
-      if (candles.length<lookback+1) return [null,null];
-      let lc=candles[candles.length-1],
-      highs=candles.slice(-lookback-1,-1).map(c=>c.high),
-      lows=candles.slice(-lookback-1,-1).map(c=>c.low);
-      if (lc.high>Math.max(...highs)) return ['buy-side',lc.high];
-      if (lc.low<Math.min(...lows)) return ['sell-side',lc.low];
-      return [null,null];
-    }
-    function detectLiquidityPool(candles, dir, lookback=20){
-      let highs=candles.slice(-lookback-1,-1).map(c=>c.high),
-        lows=candles.slice(-lookback-1,-1).map(c=>c.low);
-      return dir==='short' ? Math.min(...lows) : Math.max(...highs);
-    }
-    function calcTradeParams(dir, sweep, obp, pool, riskPct=0.5, rr=1){
-      let slbuf=sweep*(riskPct/100), sl, tp1;
-      if (dir==='short'){ sl=sweep+slbuf; tp1=obp-(sl-obp)*rr;}
-      else { sl=sweep-slbuf; tp1=obp+(obp-sl)*rr; }
-      return {
-        entry:obp.toFixed(2), sl:sl.toFixed(2), tp1:tp1.toFixed(2), tp2:pool.toFixed(2)
+    // ==== LIVE DATA BINANCE (spot BTC/USDT) ====
+    let bufferM1 = [];
+    // 1. Charger historique initial (150 dernières bougies M1)
+    fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=150')
+    .then(r => r.json())
+    .then(data => {
+      bufferM1 = data.map(c => ({
+        time: Math.floor(c[0]/1000),
+        open: +c[1], high: +c[2], low: +c[3], close: +c[4]
+      }));
+      candleSeries.setData(bufferM1);
+    });
+
+    // 2. Stream live : nouvelle bougie ou mise à jour…
+    const socket = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@kline_1m');
+    socket.onmessage = ev => {
+      const msg = JSON.parse(ev.data);
+      const k = msg.k;
+      if (!k || !k.t) return;
+      const candle = {
+        time: Math.floor(k.t/1000),
+        open: +k.o, high: +k.h, low: +k.l, close: +k.c
       };
-    }
+      // Mise à jour du buffer et du graphique
+      if (bufferM1.length && candle.time === bufferM1[bufferM1.length-1].time) bufferM1[bufferM1.length-1] = candle;
+      else bufferM1.push(candle), bufferM1.length>300 && bufferM1.shift();
+      candleSeries.setData(bufferM1);
 
-    // --- DOM bindings ---
-    const priceEl=document.getElementById('price');
-    const trendEl=document.getElementById('trend-m15'), structEl=document.getElementById('structure-m15');
-    const sweepStatEl = document.getElementById('sweep-status'), sweepTypeEl = document.getElementById('sweep-type');
-    const signalStatEl=document.getElementById('signal-status');
-    const tEntry=document.getElementById('trade-entry'), tSL=document.getElementById('trade-sl'),
-      tTP1=document.getElementById('trade-tp1'), tTP2=document.getElementById('trade-tp2');
+      // ---- LOGIQUE SMC SIMPLIFIÉE ICI ----
 
-    // --- WebSocket Binance ---
-    // Ticker live : !miniTicker@arr | Candle 1m : btcusdt@kline_1m | Candle 15m : btcusdt@kline_15m
-    const url = 'wss://stream.binance.com:9443/stream?streams=btcusdt@trade/btcusdt@kline_1m/btcusdt@kline_15m';
-    const ws = new WebSocket(url);
-
-    ws.onopen=()=>{ priceEl.innerHTML = '<span class="live-dot"></span> Chargement...'; }
-
-    ws.onmessage=ev=>{
-      let d; try{ d=JSON.parse(ev.data); }catch{ return;}
-      if(!d.stream||!d.data) return;
-
-      // --- Prix spot live ---
-      if(d.stream === "btcusdt@trade"){
-        let last = parseFloat(d.data.p);
-        priceBuffer.push(last); if(priceBuffer.length>maxPrices) priceBuffer.shift();
-        priceEl.innerHTML = `<span class="live-dot"></span> ${last.toFixed(2)} $`;
-        drawChart(priceBuffer);
+      // Chaines M1 = bufferM1, pour M15 on regroupe 15 par 15 par leur timestamp (utilitaire rapide)
+      function makeM15candles(m1arr){
+        let m15=[]; let curr=null, currStart=0, period=15*60; // 15 minutes en secondes
+        m1arr.forEach(c=>{
+          const bucket = Math.floor(c.time/period);
+          if(curr && bucket!==currStart) m15.push(curr), curr=null;
+          if(!curr){ currStart = bucket; curr={time:bucket*period, open:c.open, high:c.high, low:c.low, close:c.close}; }
+          else{
+            curr.high=Math.max(curr.high,c.high); curr.low=Math.min(curr.low,c.low); curr.close=c.close;
+          }
+        });
+        if(curr) m15.push(curr);
+        return m15.slice(-14);// max 14/15 derniers M15 pour trending
       }
-      // --- Candle 1m pour sweep, param --
-      if(d.stream === "btcusdt@kline_1m"){
-        let k=d.data.k;
-        if(!k.x) return; // On ajoute que si la bougie est clôsée
-        let candle = {timestamp: k.t, open: +k.o, high:+k.h, low:+k.l, close:+k.c, volume:+k.v};
-        addCandle(candlesM1, candle);
-        let [sweepType, sweepPrice]=detectSweep(candlesM1);
-        if(sweepType){
-          sweepStatEl.innerHTML='<span class="live-dot"></span> Nouveau sweep';
-          sweepTypeEl.textContent=sweepType;
-        } else {
-          sweepStatEl.textContent="En attente";
-          sweepTypeEl.textContent='-';
+      function getStructureM15(candles) {
+        let structure = [];
+        for (let i = 1; i < candles.length; i++) {
+          const prev = candles[i -1];
+          const curr = candles[i];
+          if (curr.high > prev.high && curr.low > prev.low) structure.push('HH');
+          else if (curr.low > prev.low && curr.high < prev.high) structure.push('HL');
+          else if (curr.high < prev.high && curr.low < prev.low) structure.push('LL');
+          else if (curr.high < prev.high && curr.low > prev.low) structure.push('LH');
+          else structure.push('N');
         }
+        return structure;
       }
-      // --- Candle 15m structure/tendance --
-      if(d.stream === "btcusdt@kline_15m"){
-        let k=d.data.k;
-        if(!k.x) return;
-        let candle = {timestamp: k.t, open: +k.o, high:+k.h, low:+k.l, close:+k.c, volume:+k.v};
-        addCandle(candlesM15, candle);
-        let struct=getStructureM15(candlesM15);
-        structEl.textContent=struct.length?struct.slice(-1)[0]:'-';
-        let trend=detectTrendM15(candlesM15);
-        trendEl.textContent=trend.charAt(0).toUpperCase()+trend.slice(1);
-        trendEl.className='kpi-value '+(trend==='bullish'?'green':(trend==='bearish'?'red':'neutral'));
-        // Signal SMC
-        let [sweepType, sweepPrice]=detectSweep(candlesM1);
-        let direction=null;
-        if (trend==='bullish'&&sweepType==='sell-side') direction='long';
-        if (trend==='bearish'&&sweepType==='buy-side') direction='short';
-        if (!direction){
-          signalStatEl.textContent="Aucun signal actif";
-          tEntry.textContent=tSL.textContent=tTP1.textContent=tTP2.textContent="-";
-        }
-        else {
-          let obPrice=candlesM1.length?candlesM1[candlesM1.length-1].close:NaN;
-          let poolPrice=detectLiquidityPool(candlesM1,direction);
-          let levels=calcTradeParams(direction,sweepPrice,obPrice,poolPrice);
-          signalStatEl.innerHTML='<span class="live-dot"></span> Signal '+direction.toUpperCase();
-          tEntry.textContent=levels.entry; tSL.textContent=levels.sl;
-          tTP1.textContent=levels.tp1; tTP2.textContent=levels.tp2;
-        }
+      function detectTrendM15(candles){
+        const struct = getStructureM15(candles);
+        if (struct.length < 3) return 'neutre';
+        const last = struct[struct.length -1];
+        const prev1 = struct[struct.length -2];
+        const prev2 = struct[struct.length -3];
+        if (prev2 === 'HL' && prev1 === 'HH' && last === 'HH') return 'bullish';
+        if (prev2 === 'LH' && prev1 === 'LL' && last === 'LL') return 'bearish';
+        if (last === 'HL' && prev1 === 'LH') return 'bullish';
+        if (last === 'LH' && prev1 === 'HL') return 'bearish';
+        return 'neutre';
+      }
+      function detectSweep(candles,lookback=5){
+        if (candles.length<lookback+1) return [null,null];
+        let lc=candles[candles.length-1],
+        highs=candles.slice(-lookback-1,-1).map(c=>c.high),
+        lows=candles.slice(-lookback-1,-1).map(c=>c.low);
+        if (lc.high>Math.max(...highs)) return ['buy-side',lc.high];
+        if (lc.low<Math.min(...lows)) return ['sell-side',lc.low];
+        return [null,null];
+      }
+      function detectLiquidityPool(candles, dir, lookback=20){
+        let highs=candles.slice(-lookback-1,-1).map(c=>c.high),
+          lows=candles.slice(-lookback-1,-1).map(c=>c.low);
+        return dir==='short' ? Math.min(...lows) : Math.max(...highs);
+      }
+      function calcTradeParams(dir, sweep, obp, pool, riskPct=0.5, rr=1){
+        let slbuf=sweep*(riskPct/100), sl, tp1;
+        if (dir==='short'){ sl=sweep+slbuf; tp1=obp-(sl-obp)*rr;}
+        else { sl=sweep-slbuf; tp1=obp+(obp-sl)*rr; }
+        return {
+          entry:obp.toFixed(2), sl:sl.toFixed(2), tp1:tp1.toFixed(2), tp2:pool.toFixed(2)
+        };
+      }
+      // Dashboard DOM
+      const trendEl=document.getElementById('trend-m15'), structEl=document.getElementById('structure-m15');
+      const sweepStatEl = document.getElementById('sweep-status'), sweepTypeEl = document.getElementById('sweep-type');
+      const signalStatEl=document.getElementById('signal-status');
+      const tEntry=document.getElementById('trade-entry'), tSL=document.getElementById('trade-sl'),
+        tTP1=document.getElementById('trade-tp1'), tTP2=document.getElementById('trade-tp2');
+      // Analyse M15
+      let candlesM15 = makeM15candles(bufferM1);
+      let struct=getStructureM15(candlesM15);
+      structEl.textContent=struct.length?struct.slice(-1)[0]:'-';
+      let trend=detectTrendM15(candlesM15);
+      trendEl.textContent=trend.charAt(0).toUpperCase()+trend.slice(1);
+      trendEl.className='kpi-value '+(trend==='bullish'?'green':(trend==='bearish'?'red':'neutral'));
+      // Sweep M1
+      let [sweepType, sweepPrice]=detectSweep(bufferM1);
+      if(sweepType){
+        sweepStatEl.innerHTML='<span style="color:#33cc66;">Nouveau sweep</span>';
+        sweepTypeEl.textContent=sweepType;
+      } else {
+        sweepStatEl.textContent="En attente";
+        sweepTypeEl.textContent='-';
+      }
+      // Signal SMC
+      let direction=null;
+      if (trend==='bullish'&&sweepType==='sell-side') direction='long';
+      if (trend==='bearish'&&sweepType==='buy-side') direction='short';
+      if (!direction){
+        signalStatEl.textContent="Aucun signal actif";
+        tEntry.textContent=tSL.textContent=tTP1.textContent=tTP2.textContent="-";
+      } else {
+        let obPrice=bufferM1.length?bufferM1[bufferM1.length-1].close:NaN;
+        let poolPrice=detectLiquidityPool(bufferM1,direction);
+        let levels=calcTradeParams(direction,sweepPrice,obPrice,poolPrice);
+        signalStatEl.innerHTML='<span style="color:#33cc66;">Signal '+direction.toUpperCase()+"</span>";
+        tEntry.textContent=levels.entry; tSL.textContent=levels.sl;
+        tTP1.textContent=levels.tp1; tTP2.textContent=levels.tp2;
       }
     };
-
-    ws.onerror=()=>{priceEl.textContent="Erreur flux live";};
-    ws.onclose=()=>{priceEl.textContent="Déconnecté";};
   </script>
 </body>
 </html>
