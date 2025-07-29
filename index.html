@@ -20,7 +20,7 @@
       border-radius: 8px;
       padding: 25px 40px;
       box-shadow: 0 2px 12px #000;
-      max-width: 600px;
+      max-width: 700px;
       width: 100%;
     }
     h1 {
@@ -54,18 +54,60 @@
       font-size: 14px;
       white-space: pre-wrap;
       border-radius: 6px;
+      margin-bottom: 20px;
+    }
+    #signal-panel {
+      background: #333;
+      padding: 20px;
+      border-radius: 8px;
+      color: #ccc;
+      font-family: Arial, sans-serif;
+    }
+    #signal-panel h2 {
+      color: #33ff66;
+      margin-bottom: 10px;
+    }
+    .signal-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 10px;
+      margin-bottom: 8px;
+      background: #222;
+      border-radius: 4px;
+    }
+    .signal-label {
+      font-weight: bold;
+      color: #aaa;
+    }
+    .signal-value {
+      font-weight: 700;
+      color: #33ff66;
+    }
+    .signal-value.red {
+      color: #ff5555;
     }
   </style>
 </head>
 <body>
 
   <div class="container">
-    <h1>Bot SMC BTC/USDT <br> Prix en Direct (Bitget)</h1>
+    <h1>Bot SMC BTC/USDT <br>Prix en Direct (Bitget)</h1>
     <div id="price">Chargement...</div>
     <div id="status">Connexion au flux WebSocket ...</div>
 
-    <!-- Zone de log pour afficher la logique et signaux SMC -->
     <div id="smc-log">Logs SMC en temps réel...</div>
+
+    <div id="signal-panel" style="display:none;">
+      <h2>Signal SMC</h2>
+      <div class="signal-row"><div class="signal-label">Tendance M15</div><div id="trend-m15" class="signal-value"></div></div>
+      <div class="signal-row"><div class="signal-label">Type Sweep M1</div><div id="sweep-type" class="signal-value"></div></div>
+      <div class="signal-row"><div class="signal-label">Prix Sweep</div><div id="sweep-price" class="signal-value"></div></div>
+      <div class="signal-row"><div class="signal-label">Direction Trade</div><div id="trade-direction" class="signal-value"></div></div>
+      <div class="signal-row"><div class="signal-label">Entrée</div><div id="trade-entry" class="signal-value"></div></div>
+      <div class="signal-row"><div class="signal-label">Stop Loss</div><div id="trade-sl" class="signal-value red"></div></div>
+      <div class="signal-row"><div class="signal-label">Take Profit 1 (1:1)</div><div id="trade-tp1" class="signal-value"></div></div>
+      <div class="signal-row"><div class="signal-label">Take Profit 2 (Pool Liquidité)</div><div id="trade-tp2" class="signal-value"></div></div>
+    </div>
   </div>
 
   <script>
@@ -73,36 +115,106 @@
     const priceEl = document.getElementById('price');
     const statusEl = document.getElementById('status');
     const smcLog = document.getElementById('smc-log');
+    const signalPanel = document.getElementById('signal-panel');
+    const trendEl = document.getElementById('trend-m15');
+    const sweepTypeEl = document.getElementById('sweep-type');
+    const sweepPriceEl = document.getElementById('sweep-price');
+    const tradeDirectionEl = document.getElementById('trade-direction');
+    const tradeEntryEl = document.getElementById('trade-entry');
+    const tradeSLEl = document.getElementById('trade-sl');
+    const tradeTP1El = document.getElementById('trade-tp1');
+    const tradeTP2El = document.getElementById('trade-tp2');
 
-    // Buffer de candles M1 et M15 pour ta logique
+    // Buffers de candles pour M1 et M15
     let candlesM1 = [];
     let candlesM15 = [];
 
-    // Configuration
-    const symbol = 'BTCUSDT_UMCBL'; // Contrat futures USDT sur Bitget
+    const symbol = 'BTCUSDT_UMCBL'; // Contrat futures USDT Bitget
 
-    // Fonction pour ajouter log dans la zone SMC
+    // ajout d'une entrée dans le log SMC
     function logSMC(msg) {
       const now = new Date().toLocaleTimeString();
       smcLog.textContent += `[${now}] ${msg}\n`;
       smcLog.scrollTop = smcLog.scrollHeight;
     }
 
-    // Simulation simple des candles (à compléter avec ta logique complète)
-    function addCandle(candles, candle) {
-      candles.push(candle);
-      if (candles.length > 100) candles.shift();
+    // ajout de chandelier (garde max 100)
+    function addCandle(buffer, candle) {
+      buffer.push(candle);
+      if (buffer.length > 100) buffer.shift();
     }
 
-    // Exemple simple de détection sweep sur candle M1 (exemple basique)
-    function detectSweep(candles) {
-      if (candles.length < 6) return null;
+    // Structure M15 (HH, HL, LL, LH)
+    function getStructureM15(candles) {
+      let structure = [];
+      for (let i = 1; i < candles.length; i++) {
+        const prev = candles[i -1];
+        const curr = candles[i];
+        if (curr.high > prev.high && curr.low > prev.low) structure.push('HH');
+        else if (curr.low > prev.low && curr.high < prev.high) structure.push('HL');
+        else if (curr.high < prev.high && curr.low < prev.low) structure.push('LL');
+        else if (curr.high < prev.high && curr.low > prev.low) structure.push('LH');
+        else structure.push('N');
+      }
+      return structure;
+    }
+
+    // Détecter tendance M15
+    function detectTrendM15(candles) {
+      const struct = getStructureM15(candles);
+      if (struct.length < 3) return 'neutre';
+
+      const last = struct[struct.length -1];
+      const prev1 = struct[struct.length -2];
+      const prev2 = struct[struct.length -3];
+
+      if (prev2 === 'HL' && prev1 === 'HH' && last === 'HH') return 'bullish';
+      if (prev2 === 'LH' && prev1 === 'LL' && last === 'LL') return 'bearish';
+      if (last === 'HL' && prev1 === 'LH') return 'bullish';
+      if (last === 'LH' && prev1 === 'HL') return 'bearish';
+
+      return 'neutre';
+    }
+
+    // Détection sweep M1
+    function detectSweep(candles, lookback=5) {
+      if (candles.length < lookback+1) return [null,null];
       const lastCandle = candles[candles.length -1];
-      const highs = candles.slice(-6, -1).map(c => c.high);
-      const lows = candles.slice(-6, -1).map(c => c.low);
-      if (lastCandle.high > Math.max(...highs)) return {type:'buy-side', price: lastCandle.high};
-      if (lastCandle.low < Math.min(...lows)) return {type:'sell-side', price: lastCandle.low};
-      return null;
+      const highs = candles.slice(candles.length - lookback -1, candles.length -1).map(c => c.high);
+      const lows = candles.slice(candles.length - lookback -1, candles.length -1).map(c => c.low);
+
+      if (lastCandle.high > Math.max(...highs)) return ['buy-side', lastCandle.high];
+      if (lastCandle.low < Math.min(...lows)) return ['sell-side', lastCandle.low];
+      return [null,null];
+    }
+
+    // Détection pool liquidité
+    function detectLiquidityPool(candles, direction, lookback=20){
+      const highs = candles.slice(-lookback-1, -1).map(c => c.high);
+      const lows = candles.slice(-lookback-1, -1).map(c => c.low);
+      if (direction === 'short') return Math.min(...lows);
+      else return Math.max(...highs);
+    }
+
+    // Calcul niveaux trade
+    function calcTradeParams(direction, sweepPrice, obPrice, poolPrice, riskPct=0.5, rrRatio=1){
+      const slBuffer = sweepPrice * (riskPct / 100);
+      let sl, tp1;
+      if (direction === 'short') {
+        sl = sweepPrice + slBuffer;
+        tp1 = obPrice - (sl - obPrice) * rrRatio;
+      } else if (direction === 'long') {
+        sl = sweepPrice - slBuffer;
+        tp1 = obPrice + (obPrice - sl) * rrRatio;
+      } else {
+        throw "Direction doit être 'long' ou 'short'";
+      }
+      return {
+        entry: obPrice.toFixed(2),
+        sl: sl.toFixed(2),
+        tp1: tp1.toFixed(2),
+        tp2: poolPrice.toFixed(2),
+      };
     }
 
     // Connexion WebSocket Bitget
@@ -111,7 +223,6 @@
     ws.onopen = () => {
       statusEl.textContent = "Connecté au flux live Bitget";
 
-      // Souscrire au ticker 1s BTCUSDT_UMCBL
       ws.send(JSON.stringify({
         op: "subscribe",
         args: [{
@@ -120,8 +231,6 @@
           instId: symbol
         }]
       }));
-
-      // Souscrire au candles 1m (exemple)
       ws.send(JSON.stringify({
         op: "subscribe",
         args: [{
@@ -130,8 +239,6 @@
           instId: symbol
         }]
       }));
-
-      // Souscrire aux candles 15m (exemple)
       ws.send(JSON.stringify({
         op: "subscribe",
         args: [{
@@ -153,52 +260,89 @@
 
       if (msg.arg && msg.data && msg.data.length) {
         const ch = msg.arg.channel;
-
-        // Prix en direct depuis le ticker
         if (ch === 'ticker') {
           const last = parseFloat(msg.data[0].last);
           priceEl.textContent = last ? last.toFixed(2) + ' $' : '—';
-        }
-
-        // Gestion des candles 1m
-        else if (ch === 'candle1m') {
-          const candleRaw = msg.data[0];
-          // candleRaw structure: [ts, open, high, low, close, vol, ...]
+        } else if (ch === 'candle1m') {
+          const c = msg.data[0];
           const candle = {
-            timestamp: candleRaw[0],
-            open: parseFloat(candleRaw[1]),
-            high: parseFloat(candleRaw[2]),
-            low: parseFloat(candleRaw[3]),
-            close: parseFloat(candleRaw[4]),
-            volume: parseFloat(candleRaw[5])
+            timestamp: c[0],
+            open: parseFloat(c[1]),
+            high: parseFloat(c[2]),
+            low: parseFloat(c[3]),
+            close: parseFloat(c[4]),
+            volume: parseFloat(c[5])
           };
           addCandle(candlesM1, candle);
 
-          // Exemple: détection sweep M1
-          const sweep = detectSweep(candlesM1);
-          if (sweep) {
-            logSMC(`Sweep détecté M1 : ${sweep.type} à ${sweep.price.toFixed(2)}`);
-          }
-        }
+          // Détection sweep M1
+          const [sweepType, sweepPrice] = detectSweep(candlesM1);
+          sweepTypeEl.textContent = sweepType ? sweepType : '—';
+          sweepPriceEl.textContent = sweepPrice ? sweepPrice.toFixed(2) : '—';
 
-        // Gestion des candles 15m
-        else if (ch === 'candle15m') {
-          const candleRaw = msg.data[0];
+          // Log si sweep détecté
+          if (sweepType) {
+            logSMC(`Sweep détecté M1 : ${sweepType} à ${sweepPrice.toFixed(2)}`);
+          }
+        } else if (ch === 'candle15m') {
+          const c = msg.data[0];
           const candle = {
-            timestamp: candleRaw[0],
-            open: parseFloat(candleRaw[1]),
-            high: parseFloat(candleRaw[2]),
-            low: parseFloat(candleRaw[3]),
-            close: parseFloat(candleRaw[4]),
-            volume: parseFloat(candleRaw[5])
+            timestamp: c[0],
+            open: parseFloat(c[1]),
+            high: parseFloat(c[2]),
+            low: parseFloat(c[3]),
+            close: parseFloat(c[4]),
+            volume: parseFloat(c[5])
           };
           addCandle(candlesM15, candle);
 
-          // Ici, tu peux faire ta détection de structure M15, trend, etc.
-          // Exemple simple (à enrichir):
-          if (candlesM15.length > 2) {
-            logSMC(`Candle M15 ajoutée - Close: ${candle.close.toFixed(2)}`);
+          // Détection tendance M15
+          const trend = detectTrendM15(candlesM15);
+          trendEl.textContent = trend.toUpperCase();
+          trendEl.style.color = trend === 'bullish' ? '#66ff66' : (trend === 'bearish' ? '#ff6666' : '#aaa');
+
+          // Log tendance
+          if (trend === 'bullish' || trend === 'bearish') {
+            logSMC(`Tendance M15 détectée : ${trend.toUpperCase()}`);
           }
+
+          // Tentative de signal trade basé sur trend + sweep
+          const [sweepType, sweepPrice] = detectSweep(candlesM1);
+
+          if (!sweepType) {
+            signalPanel.style.display = 'none';
+            return;
+          }
+
+          let direction = null;
+          if (trend === 'bullish' && sweepType === 'sell-side') direction = 'long';
+          else if (trend === 'bearish' && sweepType === 'buy-side') direction = 'short';
+
+          if (!direction) {
+            signalPanel.style.display = 'none';
+            return;
+          }
+
+          const obPrice = candlesM1.length > 0 ? candlesM1[candlesM1.length-1].close : null;
+          if (!obPrice) {
+            signalPanel.style.display = 'none';
+            return;
+          }
+
+          // Calcul pool liquidité
+          const poolPrice = detectLiquidityPool(candlesM1, direction);
+
+          // Calcul niveaux trade
+          const levels = calcTradeParams(direction, sweepPrice, obPrice, poolPrice, 0.5, 1);
+
+          tradeDirectionEl.textContent = direction.toUpperCase();
+          tradeEntryEl.textContent = levels.entry;
+          tradeSLEl.textContent = levels.sl;
+          tradeTP1El.textContent = levels.tp1;
+          tradeTP2El.textContent = levels.tp2;
+
+          signalPanel.style.display = 'block';
+          logSMC(`Signal Trade : Direction ${direction.toUpperCase()}, Entrée ${levels.entry}, SL ${levels.sl}, TP1 ${levels.tp1}, TP2 ${levels.tp2}`);
         }
       }
     };
@@ -211,6 +355,7 @@
     ws.onclose = () => {
       statusEl.textContent = "Déconnecté du flux live. Rafraîchissez la page.";
       priceEl.textContent = "--";
+      signalPanel.style.display = 'none';
     };
   </script>
 
