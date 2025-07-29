@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>SMC BTC/USDT Chart</title>
+    <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f4f4f4;
+        }
+        #chart {
+            height: 600px;
+            width: 100%;
+        }
+        h2 {
+            text-align: center;
+            padding: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h2>📊 BTC/USDT Smart Money Chart (Demo)</h2>
+    <div id="chart"></div>
+
+    <script>
+        const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+            layout: {
+                backgroundColor: '#ffffff',
+                textColor: '#000'
+            },
+            grid: {
+                vertLines: { color: '#eee' },
+                horzLines: { color: '#eee' }
+            },
+            timeScale: {
+                timeVisible: true,
+                secondsVisible: false
+            }
+        });
+
+        const candles = [
+            // 🕒 Extrait de données OHLC simulées (timestamp UNIX, pas ISO)
+            { time: 1722244200, open: 30100, high: 30250, low: 30050, close: 30200 },
+            { time: 1722244260, open: 30200, high: 30300, low: 30100, close: 30250 },
+            { time: 1722244320, open: 30250, high: 30400, low: 30200, close: 30350 },
+            { time: 1722244380, open: 30350, high: 30450, low: 30300, close: 30400 },
+            { time: 1722244440, open: 30400, high: 30500, low: 30350, close: 30480 },
+            { time: 1722244500, open: 30480, high: 30520, low: 30400, close: 30450 },
+            { time: 1722244560, open: 30450, high: 30550, low: 30300, close: 30380 },
+            { time: 1722244620, open: 30380, high: 30400, low: 30200, close: 30250 },
+            { time: 1722244680, open: 30250, high: 30300, low: 30100, close: 30150 },
+            { time: 1722244740, open: 30150, high: 30200, low: 30000, close: 30100 }
+        ];
+
+        const signals = [
+            {
+                time: 1722244740,
+                entry: 30100,
+                direction: "long",
+                ob_zone: [30000, 30100],
+                fvg_zone: [30300, 30150]
+            }
+        ];
+
+        const candleSeries = chart.addCandlestickSeries();
+        candleSeries.setData(candles);
+
+        // Ajouter zones OB & FVG et signal
+        signals.forEach(sig => {
+            // Signal d'entrée
+            chart.addShape({
+                time: sig.time,
+                price: sig.entry,
+                shape: 'arrow_up',
+                color: sig.direction === 'long' ? 'green' : 'red',
+                text: sig.direction.toUpperCase()
+            });
+
+            // Zone Order Block
+            chart.addPriceLine({
+                price: sig.ob_zone[0],
+                color: 'blue',
+                lineWidth: 1,
+                lineStyle: 2,
+                axisLabelVisible: true,
+                title: 'OB Bas'
+            });
+            chart.addPriceLine({
+                price: sig.ob_zone[1],
+                color: 'blue',
+                lineWidth: 1,
+                lineStyle: 2,
+                axisLabelVisible: true,
+                title: 'OB Haut'
+            });
+
+            // Zone FVG
+            chart.addPriceLine({
+                price: sig.fvg_zone[0],
+                color: 'orange',
+                lineWidth: 1,
+                axisLabelVisible: true,
+                title: 'FVG Haut'
+            });
+            chart.addPriceLine({
+                price: sig.fvg_zone[1],
+                color: 'orange',
+                lineWidth: 1,
+                axisLabelVisible: true,
+                title: 'FVG Bas'
+            });
+        });
+    </script>
+</body>
+</html>
