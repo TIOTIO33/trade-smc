@@ -1,202 +1,30 @@
 <!DOCTYPE html>
-<html lang="fr">
-<head>
+<html><head>
   <meta charset="UTF-8">
-  <title>SMC TradingView-Like Dashboard (Binance Live)</title>
-  <style>
-    body { margin:0; background:#f5f7fa; font-family:sans-serif;}
-    .dashboard-main { width:100vw; height:100vh; display:flex;}
-    .central-panel { flex:2; background:#eff3f9; display:flex; flex-direction:column; justify-content:center; align-items:center;}
-    .chart-area { background:#fff; border-radius:10px; padding:16px; box-shadow:0 2px 8px #eaeaea; margin:30px; }
-    .right-panel { flex:1; background:#fff; height:100vh; padding:30px 18px; box-shadow:-2px 0 10px #ececec;}
-    .panel { margin-bottom:18px; background:#f6f9fb; padding:18px 12px; border-radius:10px; }
-    .panel-title { color:#234; font-weight: bold; margin-bottom:11px;font-size:1.07em;text-transform:uppercase;}
-    .kpi-row { display:flex; justify-content:space-between;margin-bottom:5px;}
-    .kpi-label {color:#666;}
-    .kpi-value {font-weight:700;}
-    .kpi-value.green {color:#33cc66;}
-    .kpi-value.red {color:#ff4444;}
-    .kpi-value.neutral {color:#808080;}
-    @media (max-width:1000px){
-      .dashboard-main{flex-direction:column;}
-      .right-panel{width:100vw;max-width:unset;height:auto;box-shadow:none;}
-      .central-panel{padding:0;}
-    }
-  </style>
-  <!-- Librairie TradingView Lightweight Charts -->
+  <title>Test TradingView Live</title>
   <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
-  <div class="dashboard-main">
-    <div class="central-panel">
-      <div class="chart-area">
-        <div id="tvchart" style="width:720px; height:400px;"></div>
-      </div>
-    </div>
-    <div class="right-panel">
-      <div class="panel">
-        <div class="panel-title">Analyse M15</div>
-        <div class="kpi-row"><div class="kpi-label">Tendance</div><div id="trend-m15" class="kpi-value neutral">Neutre</div></div>
-        <div class="kpi-row"><div class="kpi-label">Structure</div><div id="structure-m15" class="kpi-value">-</div></div>
-      </div>
-      <div class="panel">
-        <div class="panel-title">Détection Sweep M1</div>
-        <div class="kpi-row"><div class="kpi-label">Statut</div><div id="sweep-status" class="kpi-value neutral">En attente</div></div>
-        <div class="kpi-row"><div class="kpi-label">Type</div><div id="sweep-type" class="kpi-value">-</div></div>
-      </div>
-      <div class="panel">
-        <div class="panel-title">Signal Actuel</div>
-        <div id="signal-status" style="color:#888;opacity:.85;">Aucun signal actif</div>
-      </div>
-      <div class="panel">
-        <div class="panel-title">Paramètres de Trade</div>
-        <div class="kpi-row"><div class="kpi-label">Entrée</div><div id="trade-entry" class="kpi-value">-</div></div>
-        <div class="kpi-row"><div class="kpi-label">Stop Loss</div><div id="trade-sl" class="kpi-value">-</div></div>
-        <div class="kpi-row"><div class="kpi-label">TP1</div><div id="trade-tp1" class="kpi-value">-</div></div>
-        <div class="kpi-row"><div class="kpi-label">TP2</div><div id="trade-tp2" class="kpi-value">-</div></div>
-      </div>
-    </div>
-  </div>
-  <script>
-    // Initialisation du graphique TradingView-Like
-    const chart = LightweightCharts.createChart(document.getElementById('tvchart'), {
-      width: 700, height: 390, layout: { background: { type:'Solid', color:'#fff'}, textColor:'#223'}, 
-      grid: { vertLines: { color:'#eff3f9' }, horzLines: { color:'#eff3f9' } },
-      crosshair: { mode:1 },
-      rightPriceScale: { borderColor:'#ccc' },
-      timeScale: { borderColor:'#ccc', timeVisible:true, secondsVisible:false },
-    });
-    const candleSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#e96d76', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#e96d76' });
-
-    // ==== LIVE DATA BINANCE (spot BTC/USDT) ====
-    let bufferM1 = [];
-    // 1. Charger historique initial (150 dernières bougies M1)
-    fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=150')
-    .then(r => r.json())
-    .then(data => {
-      bufferM1 = data.map(c => ({
-        time: Math.floor(c[0]/1000),
-        open: +c[1], high: +c[2], low: +c[3], close: +c[4]
-      }));
-      candleSeries.setData(bufferM1);
-    });
-
-    // 2. Stream live : nouvelle bougie ou mise à jour…
-    const socket = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@kline_1m');
-    socket.onmessage = ev => {
-      const msg = JSON.parse(ev.data);
-      const k = msg.k;
-      if (!k || !k.t) return;
-      const candle = {
-        time: Math.floor(k.t/1000),
-        open: +k.o, high: +k.h, low: +k.l, close: +k.c
-      };
-      // Mise à jour du buffer et du graphique
-      if (bufferM1.length && candle.time === bufferM1[bufferM1.length-1].time) bufferM1[bufferM1.length-1] = candle;
-      else bufferM1.push(candle), bufferM1.length>300 && bufferM1.shift();
-      candleSeries.setData(bufferM1);
-
-      // ---- LOGIQUE SMC SIMPLIFIÉE ICI ----
-
-      // Chaines M1 = bufferM1, pour M15 on regroupe 15 par 15 par leur timestamp (utilitaire rapide)
-      function makeM15candles(m1arr){
-        let m15=[]; let curr=null, currStart=0, period=15*60; // 15 minutes en secondes
-        m1arr.forEach(c=>{
-          const bucket = Math.floor(c.time/period);
-          if(curr && bucket!==currStart) m15.push(curr), curr=null;
-          if(!curr){ currStart = bucket; curr={time:bucket*period, open:c.open, high:c.high, low:c.low, close:c.close}; }
-          else{
-            curr.high=Math.max(curr.high,c.high); curr.low=Math.min(curr.low,c.low); curr.close=c.close;
-          }
-        });
-        if(curr) m15.push(curr);
-        return m15.slice(-14);// max 14/15 derniers M15 pour trending
-      }
-      function getStructureM15(candles) {
-        let structure = [];
-        for (let i = 1; i < candles.length; i++) {
-          const prev = candles[i -1];
-          const curr = candles[i];
-          if (curr.high > prev.high && curr.low > prev.low) structure.push('HH');
-          else if (curr.low > prev.low && curr.high < prev.high) structure.push('HL');
-          else if (curr.high < prev.high && curr.low < prev.low) structure.push('LL');
-          else if (curr.high < prev.high && curr.low > prev.low) structure.push('LH');
-          else structure.push('N');
-        }
-        return structure;
-      }
-      function detectTrendM15(candles){
-        const struct = getStructureM15(candles);
-        if (struct.length < 3) return 'neutre';
-        const last = struct[struct.length -1];
-        const prev1 = struct[struct.length -2];
-        const prev2 = struct[struct.length -3];
-        if (prev2 === 'HL' && prev1 === 'HH' && last === 'HH') return 'bullish';
-        if (prev2 === 'LH' && prev1 === 'LL' && last === 'LL') return 'bearish';
-        if (last === 'HL' && prev1 === 'LH') return 'bullish';
-        if (last === 'LH' && prev1 === 'HL') return 'bearish';
-        return 'neutre';
-      }
-      function detectSweep(candles,lookback=5){
-        if (candles.length<lookback+1) return [null,null];
-        let lc=candles[candles.length-1],
-        highs=candles.slice(-lookback-1,-1).map(c=>c.high),
-        lows=candles.slice(-lookback-1,-1).map(c=>c.low);
-        if (lc.high>Math.max(...highs)) return ['buy-side',lc.high];
-        if (lc.low<Math.min(...lows)) return ['sell-side',lc.low];
-        return [null,null];
-      }
-      function detectLiquidityPool(candles, dir, lookback=20){
-        let highs=candles.slice(-lookback-1,-1).map(c=>c.high),
-          lows=candles.slice(-lookback-1,-1).map(c=>c.low);
-        return dir==='short' ? Math.min(...lows) : Math.max(...highs);
-      }
-      function calcTradeParams(dir, sweep, obp, pool, riskPct=0.5, rr=1){
-        let slbuf=sweep*(riskPct/100), sl, tp1;
-        if (dir==='short'){ sl=sweep+slbuf; tp1=obp-(sl-obp)*rr;}
-        else { sl=sweep-slbuf; tp1=obp+(obp-sl)*rr; }
-        return {
-          entry:obp.toFixed(2), sl:sl.toFixed(2), tp1:tp1.toFixed(2), tp2:pool.toFixed(2)
-        };
-      }
-      // Dashboard DOM
-      const trendEl=document.getElementById('trend-m15'), structEl=document.getElementById('structure-m15');
-      const sweepStatEl = document.getElementById('sweep-status'), sweepTypeEl = document.getElementById('sweep-type');
-      const signalStatEl=document.getElementById('signal-status');
-      const tEntry=document.getElementById('trade-entry'), tSL=document.getElementById('trade-sl'),
-        tTP1=document.getElementById('trade-tp1'), tTP2=document.getElementById('trade-tp2');
-      // Analyse M15
-      let candlesM15 = makeM15candles(bufferM1);
-      let struct=getStructureM15(candlesM15);
-      structEl.textContent=struct.length?struct.slice(-1)[0]:'-';
-      let trend=detectTrendM15(candlesM15);
-      trendEl.textContent=trend.charAt(0).toUpperCase()+trend.slice(1);
-      trendEl.className='kpi-value '+(trend==='bullish'?'green':(trend==='bearish'?'red':'neutral'));
-      // Sweep M1
-      let [sweepType, sweepPrice]=detectSweep(bufferM1);
-      if(sweepType){
-        sweepStatEl.innerHTML='<span style="color:#33cc66;">Nouveau sweep</span>';
-        sweepTypeEl.textContent=sweepType;
-      } else {
-        sweepStatEl.textContent="En attente";
-        sweepTypeEl.textContent='-';
-      }
-      // Signal SMC
-      let direction=null;
-      if (trend==='bullish'&&sweepType==='sell-side') direction='long';
-      if (trend==='bearish'&&sweepType==='buy-side') direction='short';
-      if (!direction){
-        signalStatEl.textContent="Aucun signal actif";
-        tEntry.textContent=tSL.textContent=tTP1.textContent=tTP2.textContent="-";
-      } else {
-        let obPrice=bufferM1.length?bufferM1[bufferM1.length-1].close:NaN;
-        let poolPrice=detectLiquidityPool(bufferM1,direction);
-        let levels=calcTradeParams(direction,sweepPrice,obPrice,poolPrice);
-        signalStatEl.innerHTML='<span style="color:#33cc66;">Signal '+direction.toUpperCase()+"</span>";
-        tEntry.textContent=levels.entry; tSL.textContent=levels.sl;
-        tTP1.textContent=levels.tp1; tTP2.textContent=levels.tp2;
-      }
-    };
-  </script>
-</body>
-</html>
+<div id="tvchart" style="width:720px; height:400px; margin: 50px auto;"></div>
+<script>
+const chart = LightweightCharts.createChart(document.getElementById('tvchart'), {
+  width: 700, height: 390, layout:{background:{color:'#fff'},textColor:'#223'},grid:{vertLines:{color:'#f3f3f3'},horzLines:{color:'#f3f3f3'}}
+});
+const candleSeries = chart.addCandlestickSeries({ upColor: '#26a69a', downColor: '#e96d76', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#e96d76' });
+let buffer = [];
+fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=100')
+.then(r=>r.json()).then(data=>{
+  buffer = data.map(c => ({ time: Math.floor(c[0]/1000), open: +c[1], high: +c[2], low: +c[3], close: +c[4] }));
+  candleSeries.setData(buffer);
+});
+const s = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@kline_1m');
+s.onmessage = ev => {
+  const msg = JSON.parse(ev.data), k = msg.k;
+  if (!k || !k.t) return;
+  const c = { time: Math.floor(k.t/1000), open: +k.o, high: +k.h, low: +k.l, close: +k.c };
+  if (buffer.length && c.time === buffer[buffer.length-1].time) buffer[buffer.length-1] = c;
+  else buffer.push(c), buffer.length>300 && buffer.shift();
+  candleSeries.setData(buffer);
+};
+</script>
+</body></html>
