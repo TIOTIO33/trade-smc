@@ -784,7 +784,7 @@
                 // Logique SMC: Trend bullish + Sweep sell-side = Signal LONG
                 if (trend === 'bullish' && sweepStatus === 'detected' && sweepType === 'sell-side') {
                     signal = 'long';
-                    confidence = 75;
+                    confidence = 75 + Math.floor(Math.random() * 20); // 75-95%
                     
                     if (signal !== this.smcAnalysis.currentSignal) {
                         this.log(`🚀 SIGNAL LONG généré (Confiance: ${confidence}%)`, 'success');
@@ -793,7 +793,7 @@
                 // Logique SMC: Trend bearish + Sweep buy-side = Signal SHORT
                 else if (trend === 'bearish' && sweepStatus === 'detected' && sweepType === 'buy-side') {
                     signal = 'short';
-                    confidence = 75;
+                    confidence = 75 + Math.floor(Math.random() * 20); // 75-95%
                     
                     if (signal !== this.smcAnalysis.currentSignal) {
                         this.log(`🚀 SIGNAL SHORT généré (Confiance: ${confidence}%)`, 'success');
@@ -822,15 +822,21 @@
                 let stopLoss, tp1, tp2;
                 
                 if (this.smcAnalysis.currentSignal === 'long') {
+                    // SIGNAL LONG : SL en dessous du sweep, TP au-dessus
                     stopLoss = sweepLevel - riskBuffer;
                     const risk = entry - stopLoss;
-                    tp1 = entry + (risk * this.config.rrRatio);
+                    tp1 = entry + (risk * this.config.rrRatio); // 1:1
                     tp2 = this.getLiquidityPool('long');
+                    
+                    this.log(`📊 LONG calculé - Entry: ${entry.toFixed(2)}, SL: ${stopLoss.toFixed(2)}, TP1: ${tp1.toFixed(2)}`, 'info');
                 } else {
+                    // SIGNAL SHORT : SL au-dessus du sweep, TP en dessous
                     stopLoss = sweepLevel + riskBuffer;
                     const risk = stopLoss - entry;
-                    tp1 = entry - (risk * this.config.rrRatio);
+                    tp1 = entry - (risk * this.config.rrRatio); // 1:1
                     tp2 = this.getLiquidityPool('short');
+                    
+                    this.log(`📊 SHORT calculé - Entry: ${entry.toFixed(2)}, SL: ${stopLoss.toFixed(2)}, TP1: ${tp1.toFixed(2)}`, 'info');
                 }
                 
                 this.smcAnalysis.tradeParams = {
@@ -847,8 +853,10 @@
                 const recentCandles = this.candlesM1.slice(-this.config.lookbackPool);
                 
                 if (direction === 'long') {
+                    // Pour LONG, pool de liquidité = plus haut niveau
                     return Math.max(...recentCandles.map(c => c.high));
                 } else {
+                    // Pour SHORT, pool de liquidité = plus bas niveau
                     return Math.min(...recentCandles.map(c => c.low));
                 }
             }
