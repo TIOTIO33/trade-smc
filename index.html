@@ -1,231 +1,1029 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Bot SMC avec graphique TradingView</title>
-<!-- Librairie lightweight-charts -->
-<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
-<style>
-body {
-  margin: 0; font-family: 'Inter', sans-serif; background:#121212; color:#ddd;
-  display:flex; flex-direction:column; min-height:100vh;
-}
-h1 { text-align:center; margin:20px 0; font-size:2rem; }
-#prix { text-align:center; font-size:2.5rem; margin:10px 0; font-weight:700; color:#66ff66; }
-#graph-container { display:flex; justify-content:center; margin-bottom:20px; }
-#chart { max-width: 800px; width: 100%; height: 400px; border-radius:10px; overflow:hidden; }
-#dashboard { display:flex; flex-wrap:wrap; justify-content:space-around; padding:10px 20px;}
-.card { background:#222; padding:15px; margin:10px; border-radius:10px; width:280px; box-shadow:0 2px 8px rgba(0,0,0,0.5);}
-.card h3 { margin-top:0; font-size:1.2rem; margin-bottom:10px; color:#66ff66; }
-.kpi { font-size:1rem; font-weight:600; margin:5px 0; display:flex; justify-content:space-between; }
-.kpi span { font-weight:700; }
-.green { color:#00c853; }
-.red { color:#d50000; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot SMC Trading - BTC/USDT Live</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0a0a;
+            color: #ffffff;
+            overflow-x: hidden;
+        }
+        
+        .trading-app {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+        }
+        
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 30px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .app-title {
+            font-size: 24px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #00c853, #00a843);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ffa500;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-dot.connected { background: #00c853; }
+        .status-dot.error { background: #d50000; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 20px;
+            padding: 20px;
+            min-height: calc(100vh - 80px);
+        }
+        
+        .chart-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .chart-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .btn--sm { padding: 6px 12px; font-size: 14px; }
+        
+        .timeframe-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+        }
+        
+        .timeframe-btn.active {
+            background: #00c853;
+            color: #000000;
+        }
+        
+        .timeframe-btn:hover {
+            background: rgba(0, 200, 83, 0.8);
+        }
+        
+        .chart-container {
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .dashboard-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .dashboard-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .panel-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .price-display {
+            text-align: center;
+        }
+        
+        .current-price {
+            font-size: 28px;
+            font-weight: 700;
+            color: #00c853;
+            margin-bottom: 5px;
+        }
+        
+        .price-change {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .price-change.positive { color: #00c853; }
+        .price-change.negative { color: #d50000; }
+        
+        .kpi-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 8px 0;
+        }
+        
+        .kpi-label {
+            color: #cccccc;
+            font-size: 14px;
+        }
+        
+        .kpi-value {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .kpi-value.bullish { color: #00c853; }
+        .kpi-value.bearish { color: #d50000; }
+        .kpi-value.neutral { color: #ffa500; }
+        
+        .signal-display {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .signal-display.long {
+            background: rgba(0, 200, 83, 0.2);
+            color: #00c853;
+            border: 1px solid #00c853;
+        }
+        
+        .signal-display.short {
+            background: rgba(213, 0, 0, 0.2);
+            color: #d50000;
+            border: 1px solid #d50000;
+        }
+        
+        .signal-display.none {
+            background: rgba(128, 128, 128, 0.2);
+            color: #888888;
+            border: 1px solid #888888;
+        }
+        
+        .logs-panel {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .log-entry {
+            font-size: 12px;
+            margin-bottom: 5px;
+            padding: 5px;
+            border-radius: 4px;
+            border-left: 3px solid;
+        }
+        
+        .log-entry.info {
+            background: rgba(0, 200, 83, 0.1);
+            border-color: #00c853;
+            color: #cccccc;
+        }
+        
+        .log-entry.success {
+            background: rgba(0, 200, 83, 0.2);
+            border-color: #00c853;
+            color: #00c853;
+        }
+        
+        .log-entry.warning {
+            background: rgba(255, 165, 0, 0.2);
+            border-color: #ffa500;
+            color: #ffa500;
+        }
+        
+        .log-entry.error {
+            background: rgba(213, 0, 0, 0.2);
+            border-color: #d50000;
+            color: #d50000;
+        }
+        
+        @media (max-width: 1200px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .dashboard-section {
+                order: -1;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .app-header {
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+            }
+            
+            .main-content {
+                padding: 15px;
+            }
+            
+            .dashboard-panel {
+                padding: 15px;
+            }
+        }
+    </style>
 </head>
 <body>
+    <div class="trading-app">
+        <header class="app-header">
+            <h1 class="app-title">Bot SMC Trading - BTC/USDT Live</h1>
+            <div class="connection-status">
+                <div class="status-indicator" id="connectionStatus">
+                    <div class="status-dot"></div>
+                    <span class="status-text">Connexion...</span>
+                </div>
+            </div>
+        </header>
 
-<h1>Bot SMC + Graphique TradingView Style</h1>
-<div id="prix">Chargement...</div>
-<div id="graph-container">
-  <div id="chart"></div>
-</div>
-<div id="dashboard">
-  <!-- Analyse M15 -->
-  <div class="card">
-    <h3>Analyse M15</h3>
-    <div class="kpi">Tendance : <span id="trend-m15" class="neutral">-</span></div>
-    <div class="kpi">Structure : <span id="structure-m15">-</span></div>
-  </div>
-  <!-- Sweep M1 -->
-  <div class="card">
-    <h3>Sweep M1</h3>
-    <div class="kpi">Statut : <span id="sweep-status" class="neutral">-</span></div>
-    <div class="kpi">Type : <span id="sweep-type">-</span></div>
-  </div>
-  <!-- Signal et niveaux -->
-  <div class="card">
-    <h3>Signal</h3>
-    <div class="kpi">Direction : <span id="signal-direction" class="neutral">-</span></div>
-    <div class="kpi">Entry : <span id="signal-entry">-</span></div>
-    <div class="kpi">SL : <span id="signal-sl" class="red">-</span></div>
-    <div class="kpi">TP1 : <span id="signal-tp1">-</span></div>
-    <div class="kpi">TP2 : <span id="signal-tp2">-</span></div>
-  </div>
-</div>
+        <div class="main-content">
+            <div class="chart-section">
+                <div class="chart-controls">
+                    <button class="btn btn--sm timeframe-btn active" data-interval="1">1m</button>
+                    <button class="btn btn--sm timeframe-btn" data-interval="15">15m</button>
+                </div>
+                <div class="chart-container">
+                    <iframe 
+                        id="tradingviewChart" 
+                        src="https://s.tradingview.com/widgetembed/?symbol=BINANCE:BTCUSDT&interval=1&theme=dark&style=1&timezone=Europe%2FParis&withdateranges=1&hideideas=1&hidevolume=1"
+                        width="100%" 
+                        height="400"
+                        frameborder="0">
+                    </iframe>
+                </div>
+            </div>
 
-<script>
-const chartContainer = document.getElementById('chart');
-const priceEl = document.getElementById('prix');
-// Analyse graphique
-const chart = LightweightCharts.createChart(chartContainer, {
-  width: chartContainer.clientWidth,
-  height: 400,
-  layout: { backgroundColor:'#121212', textColor:'#eee' },
-  grid: { vertLines:{color:'#333'}, horzLines:{color:'#333'} },
-  crosshair: { mode:1 },
-  rightPriceScale: { borderColor:'#555' },
-  timeScale: { borderColor:'#555', timeVisible:true, secondsVisible:false }
-});
-const candleSeries = chart.addCandlestickSeries({
-  upColor:'#00ff99', downColor:'#ff0033', borderColor:'#ffffff', wickUpColor:'#00ff99', wickDownColor:'#ff0033',
-});
-// Buffer candles
-let candles = [];
-const maxCandles=200;
+            <div class="dashboard-section">
+                <!-- Prix Live -->
+                <div class="dashboard-panel">
+                    <h3 class="panel-title">Prix Live BTC/USDT</h3>
+                    <div class="price-display">
+                        <div class="current-price" id="currentPrice">$95,000.00</div>
+                        <div class="price-change" id="priceChange">+0.00 (+0.00%)</div>
+                    </div>
+                </div>
 
-// Charger historique initial (à partir de Binance)
-fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=150')
-.then(r=>r.json())
-.then(data=> {
-  candles = data.map(c => ({ time: Math.floor(c[0]/1000), open: +c[1], high: +c[2], low: +c[3], close: +c[4] }));
-  candleSeries.setData(candles);
-})
-// WebSocket live Binance
-const ws=new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@kline_1m');
-ws.onmessage=ev => {
-  const d=JSON.parse(ev.data);
-  const k = d.k;
-  if(!k || !k.t) return;
-  const c = { time: Math.floor(k.t/1000), open: +k.o, high: +k.h, low: +k.l, close: +k.c };
-  if(candles.length && c.time===candles[candles.length-1].time) candles[candles.length-1]=c;
-  else { candles.push(c); if(candles.length>maxCandles) candles.shift(); }
-  candleSeries.setData(candles);
-  
-  // Analyse détectée
-  updateAnalysis();
-};
-ws.onerror=()=>{ alert("Erreur WebSocket – Vérifiez votre réseau"); };
+                <!-- Analyse M15 -->
+                <div class="dashboard-panel">
+                    <h3 class="panel-title">Analyse M15</h3>
+                    <div class="kpi-row">
+                        <span class="kpi-label">Tendance</span>
+                        <span class="kpi-value neutral" id="m15Trend">Neutral</span>
+                    </div>
+                    <div class="kpi-row">
+                        <span class="kpi-label">Structure</span>
+                        <span class="kpi-value" id="m15Structure">Range</span>
+                    </div>
+                </div>
 
-// Fonctions d’analyse SMC
-function getStructure(c) {
-  let s=[];
-  for(let i=1; i<c.length; i++) {
-    let p=c[i-1], curr=c[i];
-    if(curr.high>p.high && curr.low>p.low) s.push('HH');
-    else if(curr.low>p.low && curr.high<p.high) s.push('HL');
-    else if(curr.high<p.high && curr.low<p.low) s.push('LL');
-    else if(curr.high<p.high && curr.low>p.low) s.push('LH');
-    else s.push('N');
-  }
-  return s;
-}
+                <!-- Détection Sweep M1 -->
+                <div class="dashboard-panel">
+                    <h3 class="panel-title">Détection Sweep M1</h3>
+                    <div class="kpi-row">
+                        <span class="kpi-label">Statut</span>
+                        <span class="kpi-value neutral" id="sweepStatus">En attente</span>
+                    </div>
+                    <div class="kpi-row">
+                        <span class="kpi-label">Type</span>
+                        <span class="kpi-value" id="sweepType">-</span>
+                    </div>
+                    <div class="kpi-row">
+                        <span class="kpi-label">Niveau</span>
+                        <span class="kpi-value" id="sweepLevel">-</span>
+                    </div>
+                </div>
 
-function detectTrend(c) {
-  if(c.length<3) return 'neutre';
-  const s=getStructure(c);
-  const last=s[s.length-1], prev=s[s.length-2], prev2=s[s.length-3];
-  if(prev2==='HL'&&prev==='HH'&&last==='HH') return 'bullish';
-  if(prev2==='LH'&&prev==='LL'&&last==='LL') return 'bearish';
-  if(last==='HL'&&prev==='LH') return 'bullish';
-  if(last==='LH'&&prev==='HL') return 'bearish';
-  return 'neutre';
-}
+                <!-- Signal Actuel -->
+                <div class="dashboard-panel">
+                    <h3 class="panel-title">Signal Actuel</h3>
+                    <div class="signal-display none" id="currentSignal">
+                        Aucun signal actif
+                    </div>
+                    <div class="kpi-row">
+                        <span class="kpi-label">Confiance</span>
+                        <span class="kpi-value" id="signalConfidence">0%</span>
+                    </div>
+                </div>
 
-function detectSweep(c, lookback=5) {
-  if(c.length<lookback+1) return null;
-  const last=c[c.length-1], recent=c.slice(-lookback-1,-1);
-  const highs=recent.map(x=>x.high), lows=recent.map(x=>x.low);
-  if(last.high>Math.max(...highs)) return {type:'buy-side', price:last.high};
-  if(last.low<Math.min(...lows)) return {type:'sell-side', price:last.low};
-  return null;
-}
+                <!-- Paramètres de Trade -->
+                <div class="dashboard-panel">
+                    <h3 class="panel-title">Paramètres de Trade</h3>
+                    <div class="kpi-row">
+                        <span class="kpi-label">Entrée</span>
+                        <span class="kpi-value" id="tradeEntry">-</span>
+                    </div>
+                    <div class="kpi-row">
+                        <span class="kpi-label">Stop Loss</span>
+                        <span class="kpi-value" id="tradeStopLoss">-</span>
+                    </div>
+                    <div class="kpi-row">
+                        <span class="kpi-label">TP1 (1:1)</span>
+                        <span class="kpi-value" id="tradeTp1">-</span>
+                    </div>
+                    <div class="kpi-row">
+                        <span class="kpi-label">TP2 (Pool)</span>
+                        <span class="kpi-value" id="tradeTp2">-</span>
+                    </div>
+                </div>
 
-// Mise à jour analyse et UI
-function updateAnalysis() {
-  // Tendance M15 (calcul simple basé sur les derniers candles M15)
-  const candlesM15 = candles.slice(-15); 
-  const trend=getTrend(candlesM15);
-  document.getElementById('trend-m15').textContent=trend;
-  document.getElementById('trend-m15').className='kpi '+(trend==='bullish'?'green':(trend==='bearish'?'red':'neutral'));
-  // Structure M15
-  const structure=getStructure(candlesM15);
-  document.getElementById('structure-m15').textContent=structure.slice(-1)[0]||'-';
+                <!-- Logs d'Activité -->
+                <div class="dashboard-panel">
+                    <h3 class="panel-title">Logs d'Activité</h3>
+                    <div class="logs-panel" id="logsContainer">
+                        <!-- Les logs apparaîtront ici -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-  // Sweep M1
-  const sweep=detectSweep(candles);
-  if(sweep) {
-    document.getElementById('sweep-status').innerHTML='<span style="color:#00c853;">Nouveau sweep</span>';
-    document.getElementById('sweep-type').textContent=sweep.type;
-  } else {
-    document.getElementById('sweep-status').textContent='En attente';
-    document.getElementById('sweep-type').textContent='-';
-  }
+    <script>
+        // Bot SMC Trading Application
+        class SMCTradingBot {
+            constructor() {
+                this.config = {
+                    lookbackSweep: 5,
+                    lookbackPool: 20,
+                    riskPercentage: 0.5,
+                    rrRatio: 1
+                };
+                
+                this.websocket = null;
+                this.isConnected = false;
+                this.currentPrice = 95000;
+                this.previousPrice = 95000;
+                
+                // Buffers pour les candles
+                this.candlesM1 = [];
+                this.candlesM15 = [];
+                this.maxCandles = 100;
+                
+                // Données SMC
+                this.smcAnalysis = {
+                    m15Trend: 'neutral',
+                    m15Structure: 'Range',
+                    sweepStatus: 'waiting',
+                    sweepType: null,
+                    sweepLevel: null,
+                    currentSignal: 'none',
+                    confidence: 0,
+                    tradeParams: {
+                        entry: null,
+                        stopLoss: null,
+                        tp1: null,
+                        tp2: null
+                    }
+                };
+                
+                this.supportLevel = 94800;
+                this.resistanceLevel = 95400;
+                this.lastSweepTime = 0;
+                this.updateInterval = null;
+                this.analysisInterval = null;
+                
+                this.init();
+            }
 
-  // Signaux
-  let direction=null;
-  if(trend==='bullish' && sweep?.type==='sell-side') direction='long';
-  if(trend==='bearish' && sweep?.type==='buy-side') direction='short';
-  if(!direction){
-    document.getElementById('signal').textContent='Aucun signal détecté';
-    ['signal-direction','signal-entry','signal-sl','signal-tp1','signal-tp2'].forEach(id=> {
-      document.getElementById(id).textContent='-';
-      document.getElementById(id).className='kpi';
-    });
-    return;
-  }
+            init() {
+                this.log('🚀 Initialisation du bot SMC Trading...', 'info');
+                this.setupEventListeners();
+                this.generateInitialCandles();
+                this.connectWebSocket();
+                this.startAnalysis();
+                this.updateConnectionStatus('Connexion...', 'connecting');
+                
+                // Première analyse immédiate
+                setTimeout(() => {
+                    this.performSMCAnalysis();
+                    this.updateDashboard();
+                }, 1000);
+            }
 
-  // Obtenir prix actuel
-  const obPrice= candles[candles.length-1]?.close ||0;
-  const poolPrice=detectLiquidityPool(candles, direction);
-  const levels=calcTradeLevels(direction, sweep.price, obPrice,poolPrice);
-  
-  document.getElementById('signal-direction').textContent=direction;
-  document.getElementById('signal-direction').className='kpi '+(direction==='long'?'green':'red');
-  document.getElementById('signal-entry').textContent=levels.entry;
-  document.getElementById('signal-sl').textContent=levels.sl;
-  document.getElementById('signal-tp1').textContent=levels.tp1;
-  document.getElementById('signal-tp2').textContent=levels.tp2;
-}
+            setupEventListeners() {
+                // Boutons timeframe
+                document.querySelectorAll('.timeframe-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('active'));
+                        e.target.classList.add('active');
+                        
+                        const interval = e.target.dataset.interval;
+                        this.changeTimeframe(interval);
+                    });
+                });
+            }
 
-// Calcul niveaux trade
-function calcTradeLevels(direction,sweepPrice,obPrice,poolPrice, riskPct=0.5, rr=1) {
-  const slBuffer=sweepPrice * (riskPct/100);
-  let sl, tp1;
-  if(direction==='short'){ sl=sweepPrice+slBuffer; tp1=obPrice-(sl-obPrice)*rr; }
-  else { sl=sweepPrice-slBuffer; tp1=obPrice+(obPrice-sl)*rr; }
-  return {entry:obPrice.toFixed(2), sl:sl.toFixed(2), tp1:tp1.toFixed(2), tp2:poolPrice.toFixed(2)};
-}
+            changeTimeframe(interval) {
+                const iframe = document.getElementById('tradingviewChart');
+                const baseUrl = iframe.src.split('&interval=')[0];
+                iframe.src = baseUrl + `&interval=${interval}&theme=dark&style=1&timezone=Europe%2FParis&withdateranges=1&hideideas=1&hidevolume=1`;
+                this.log(`📊 Timeframe changé vers ${interval}m`, 'info');
+            }
 
-function getTrend(c) {
-  if(c.length<3) return 'neutre';
-  const s=getStructure(c);
-  const last=s[s.length-1], prev=s[s.length-2], prev2=s[s.length-3];
-  if(prev2==='HL'&&prev==='HH'&&last==='HH') return 'bullish';
-  if(prev2==='LH'&&prev==='LL'&&last==='LL') return 'bearish';
-  if(last==='HL'&&prev==='LH') return 'bullish';
-  if(last==='LH'&&prev==='HL') return 'bearish';
-  return 'neutre';
-}
+            generateInitialCandles() {
+                // Générer des candles initiales réalistes
+                const now = Date.now();
+                const basePrice = 95000;
+                
+                // Candles M1 (100 candles = 100 minutes)
+                for (let i = 99; i >= 0; i--) {
+                    const time = now - (i * 60 * 1000);
+                    const volatility = Math.random() * 200 - 100; // -100 à +100
+                    const open = basePrice + volatility + (Math.random() * 50 - 25);
+                    const close = open + (Math.random() * 80 - 40);
+                    const high = Math.max(open, close) + Math.random() * 30;
+                    const low = Math.min(open, close) - Math.random() * 30;
+                    
+                    this.candlesM1.push({
+                        time: time,
+                        open: open,
+                        high: high,
+                        low: low,
+                        close: close,
+                        volume: Math.random() * 100 + 50
+                    });
+                }
+                
+                // Candles M15 (30 candles = 7.5 heures)
+                for (let i = 29; i >= 0; i--) {
+                    const time = now - (i * 15 * 60 * 1000);
+                    const volatility = Math.random() * 400 - 200;
+                    const open = basePrice + volatility + (Math.random() * 100 - 50);
+                    const close = open + (Math.random() * 150 - 75);
+                    const high = Math.max(open, close) + Math.random() * 60;
+                    const low = Math.min(open, close) - Math.random() * 60;
+                    
+                    this.candlesM15.push({
+                        time: time,
+                        open: open,
+                        high: high,
+                        low: low,
+                        close: close,
+                        volume: Math.random() * 500 + 200
+                    });
+                }
+                
+                this.currentPrice = this.candlesM1[this.candlesM1.length - 1].close;
+                this.previousPrice = this.currentPrice;
+            }
 
-// Détecter liquidity pool
-function detectLiquidityPool(c, dir) {
-  const highs=c.slice(-20).map(x=>x.high);
-  const lows=c.slice(-20).map(x=>x.low);
-  return dir==='short' ? Math.min(...lows) : Math.max(...highs);
-}
+            connectWebSocket() {
+                try {
+                    // Tentative de connexion WebSocket Binance
+                    this.websocket = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@kline_1m');
+                    
+                    this.websocket.onopen = () => {
+                        this.isConnected = true;
+                        this.updateConnectionStatus('Connecté (Live)', 'connected');
+                        this.log('✅ Connexion WebSocket Binance établie', 'success');
+                    };
+                    
+                    this.websocket.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            if (data.k) {
+                                this.processKlineData(data.k);
+                            }
+                        } catch (error) {
+                            console.error('Erreur parsing WebSocket:', error);
+                        }
+                    };
+                    
+                    this.websocket.onerror = () => {
+                        this.log('⚠️ Erreur WebSocket, passage en mode simulation', 'warning');
+                        this.fallbackToSimulation();
+                    };
+                    
+                    this.websocket.onclose = () => {
+                        this.isConnected = false;
+                        this.log('❌ Connexion WebSocket fermée, passage en mode simulation', 'warning');
+                        this.fallbackToSimulation();
+                    };
+                    
+                    // Timeout de connexion
+                    setTimeout(() => {
+                        if (!this.isConnected) {
+                            this.log('⏱️ Timeout connexion WebSocket, passage en mode simulation', 'warning');
+                            this.fallbackToSimulation();
+                        }
+                    }, 5000);
+                    
+                } catch (error) {
+                    this.log('❌ Impossible de se connecter à Binance, mode simulation activé', 'error');
+                    this.fallbackToSimulation();
+                }
+            }
 
-// WebSocket pour prix et candles
-const socket=new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@kline_1m');
-socket.onopen=()=>{ document.getElementById('prix').textContent='Chargement...'; }
-socket.onmessage=ev => {
-  const d=JSON.parse(ev.data);
-  const k=d.k;
-  if(!k || !k.t) return;
-  const c={ time: Math.floor(k.t/1000), open:+k.o, high:+k.h, low:+k.l, close:+k.c };
-  if(candles.length && c.time===candles[candles.length-1].time) candles[candles.length-1]=c;
-  else { candles.push(c); if(candles.length>200) candles.shift(); }
-  // mettre à jour graphique
-  if(candles.length) {
-    candleSeries.setData(candles);
-    // Analyse automatique
-    updateAnalysis();
-    // Mise à jour prix
-    document.getElementById('prix').textContent=c.close.toFixed(2)+' $';
-  }
-};
-</script>
+            processKlineData(kline) {
+                const candle = {
+                    time: kline.t,
+                    open: parseFloat(kline.o),
+                    high: parseFloat(kline.h),
+                    low: parseFloat(kline.l),
+                    close: parseFloat(kline.c),
+                    volume: parseFloat(kline.v)
+                };
+                
+                // Mise à jour du prix actuel
+                this.previousPrice = this.currentPrice;
+                this.currentPrice = candle.close;
+                
+                // Mise à jour des buffers
+                if (kline.x) { // Candle fermée
+                    this.addCandle(this.candlesM1, candle);
+                    this.log(`📊 Nouvelle candle M1: ${candle.close.toFixed(2)}$`, 'info');
+                }
+            }
 
+            fallbackToSimulation() {
+                if (this.websocket) {
+                    this.websocket.close();
+                }
+                this.isConnected = false;
+                this.updateConnectionStatus('Simulation', 'connecting');
+                this.startSimulatedData();
+            }
+
+            startSimulatedData() {
+                // Simulation de données réalistes
+                this.updateInterval = setInterval(() => {
+                    const change = (Math.random() - 0.5) * 100; // Changement de -50$ à +50$
+                    const trend = Math.sin(Date.now() / 100000) * 200; // Tendance sinusoïdale
+                    
+                    this.previousPrice = this.currentPrice;
+                    this.currentPrice += change + trend * 0.1;
+                    
+                    // Générer une nouvelle candle M1 toutes les 3 secondes (simulation accélérée)
+                    if (Math.random() > 0.7) {
+                        const now = Date.now();
+                        const lastCandle = this.candlesM1[this.candlesM1.length - 1];
+                        const open = lastCandle ? lastCandle.close : this.currentPrice;
+                        const close = this.currentPrice;
+                        const high = Math.max(open, close) + Math.random() * 50;
+                        const low = Math.min(open, close) - Math.random() * 50;
+                        
+                        const newCandle = {
+                            time: now,
+                            open: open,
+                            high: high,
+                            low: low,
+                            close: close,
+                            volume: Math.random() * 100 + 50
+                        };
+                        
+                        this.addCandle(this.candlesM1, newCandle);
+                        
+                        // Générer une candle M15 occasionnellement
+                        if (Math.random() > 0.9) {
+                            this.addCandle(this.candlesM15, {
+                                ...newCandle,
+                                high: newCandle.high + Math.random() * 30,
+                                low: newCandle.low - Math.random() * 30
+                            });
+                        }
+                    }
+                }, 1000);
+            }
+
+            addCandle(buffer, candle) {
+                buffer.push(candle);
+                if (buffer.length > this.maxCandles) {
+                    buffer.shift();
+                }
+            }
+
+            startAnalysis() {
+                // Analyse SMC toutes les 2 secondes
+                this.analysisInterval = setInterval(() => {
+                    this.performSMCAnalysis();
+                    this.updateDashboard();
+                }, 2000);
+            }
+
+            performSMCAnalysis() {
+                // Analyse M15
+                this.analyzeM15Trend();
+                this.analyzeM15Structure();
+                
+                // Analyse M1
+                this.detectSweep();
+                
+                // Génération de signaux
+                this.generateSignals();
+                
+                // Calcul des paramètres de trade
+                this.calculateTradeParams();
+            }
+
+            analyzeM15Trend() {
+                if (this.candlesM15.length < 10) return;
+                
+                const recentCandles = this.candlesM15.slice(-10);
+                const structure = this.getStructure(recentCandles);
+                
+                // Logique de détection de tendance simplifiée
+                const trend = this.detectTrend(structure);
+                
+                if (trend !== this.smcAnalysis.m15Trend) {
+                    this.smcAnalysis.m15Trend = trend;
+                    this.log(`📈 Nouvelle tendance M15: ${trend.toUpperCase()}`, 'success');
+                }
+            }
+
+            analyzeM15Structure() {
+                if (this.candlesM15.length < 3) return;
+                
+                const recent = this.candlesM15.slice(-3);
+                const structure = this.getStructure(recent);
+                
+                if (structure.length > 0) {
+                    const lastStructure = structure[structure.length - 1];
+                    if (lastStructure !== this.smcAnalysis.m15Structure) {
+                        this.smcAnalysis.m15Structure = lastStructure;
+                        this.log(`🏗️ Structure M15: ${lastStructure}`, 'info');
+                    }
+                }
+            }
+
+            getStructure(candles) {
+                const structure = [];
+                
+                for (let i = 1; i < candles.length; i++) {
+                    const prev = candles[i - 1];
+                    const curr = candles[i];
+                    
+                    if (curr.high > prev.high && curr.low > prev.low) {
+                        structure.push('HH'); // Higher High
+                    } else if (curr.high < prev.high && curr.low < prev.low) {
+                        structure.push('LL'); // Lower Low
+                    } else if (curr.high > prev.high && curr.low < prev.low) {
+                        structure.push('HL'); // Higher Low
+                    } else if (curr.high < prev.high && curr.low > prev.low) {
+                        structure.push('LH'); // Lower High
+                    } else {
+                        structure.push('N'); // Neutral
+                    }
+                }
+                
+                return structure;
+            }
+
+            detectTrend(structure) {
+                if (structure.length < 3) return 'neutral';
+                
+                const recent = structure.slice(-3);
+                const bullishCount = recent.filter(s => s === 'HH' || s === 'HL').length;
+                const bearishCount = recent.filter(s => s === 'LL' || s === 'LH').length;
+                
+                if (bullishCount >= 2) return 'bullish';
+                if (bearishCount >= 2) return 'bearish';
+                return 'neutral';
+            }
+
+            detectSweep() {
+                if (this.candlesM1.length < this.config.lookbackSweep + 1) return;
+                
+                const recentCandles = this.candlesM1.slice(-this.config.lookbackSweep - 1);
+                const lastCandle = recentCandles[recentCandles.length - 1];
+                const previousCandles = recentCandles.slice(0, -1);
+                
+                const highestHigh = Math.max(...previousCandles.map(c => c.high));
+                const lowestLow = Math.min(...previousCandles.map(c => c.low));
+                
+                // Détection sweep buy-side (cassure des hauts)
+                if (lastCandle.high > highestHigh) {
+                    const timeSinceLastSweep = Date.now() - this.lastSweepTime;
+                    if (timeSinceLastSweep > 60000) { // Au moins 1 minute entre les sweeps
+                        this.smcAnalysis.sweepStatus = 'detected';
+                        this.smcAnalysis.sweepType = 'buy-side';
+                        this.smcAnalysis.sweepLevel = lastCandle.high;
+                        this.lastSweepTime = Date.now();
+                        this.log(`🔥 Sweep BUY-SIDE détecté à ${lastCandle.high.toFixed(2)}$`, 'success');
+                    }
+                }
+                // Détection sweep sell-side (cassure des bas)
+                else if (lastCandle.low < lowestLow) {
+                    const timeSinceLastSweep = Date.now() - this.lastSweepTime;
+                    if (timeSinceLastSweep > 60000) {
+                        this.smcAnalysis.sweepStatus = 'detected';
+                        this.smcAnalysis.sweepType = 'sell-side';
+                        this.smcAnalysis.sweepLevel = lastCandle.low;
+                        this.lastSweepTime = Date.now();
+                        this.log(`🔥 Sweep SELL-SIDE détecté à ${lastCandle.low.toFixed(2)}$`, 'success');
+                    }
+                }
+                
+                // Reset du sweep après 5 minutes
+                if (Date.now() - this.lastSweepTime > 300000) {
+                    if (this.smcAnalysis.sweepStatus === 'detected') {
+                        this.smcAnalysis.sweepStatus = 'waiting';
+                        this.smcAnalysis.sweepType = null;
+                        this.smcAnalysis.sweepLevel = null;
+                    }
+                }
+            }
+
+            generateSignals() {
+                const trend = this.smcAnalysis.m15Trend;
+                const sweepType = this.smcAnalysis.sweepType;
+                const sweepStatus = this.smcAnalysis.sweepStatus;
+                
+                let signal = 'none';
+                let confidence = 0;
+                
+                // Logique SMC: Trend bullish + Sweep sell-side = Signal LONG
+                if (trend === 'bullish' && sweepStatus === 'detected' && sweepType === 'sell-side') {
+                    signal = 'long';
+                    confidence = 75;
+                    
+                    if (signal !== this.smcAnalysis.currentSignal) {
+                        this.log(`🚀 SIGNAL LONG généré (Confiance: ${confidence}%)`, 'success');
+                    }
+                }
+                // Logique SMC: Trend bearish + Sweep buy-side = Signal SHORT
+                else if (trend === 'bearish' && sweepStatus === 'detected' && sweepType === 'buy-side') {
+                    signal = 'short';
+                    confidence = 75;
+                    
+                    if (signal !== this.smcAnalysis.currentSignal) {
+                        this.log(`🚀 SIGNAL SHORT généré (Confiance: ${confidence}%)`, 'success');
+                    }
+                }
+                
+                this.smcAnalysis.currentSignal = signal;
+                this.smcAnalysis.confidence = confidence;
+            }
+
+            calculateTradeParams() {
+                if (this.smcAnalysis.currentSignal === 'none' || !this.smcAnalysis.sweepLevel) {
+                    this.smcAnalysis.tradeParams = {
+                        entry: null,
+                        stopLoss: null,
+                        tp1: null,
+                        tp2: null
+                    };
+                    return;
+                }
+                
+                const entry = this.currentPrice;
+                const sweepLevel = this.smcAnalysis.sweepLevel;
+                const riskBuffer = sweepLevel * (this.config.riskPercentage / 100);
+                
+                let stopLoss, tp1, tp2;
+                
+                if (this.smcAnalysis.currentSignal === 'long') {
+                    stopLoss = sweepLevel - riskBuffer;
+                    const risk = entry - stopLoss;
+                    tp1 = entry + (risk * this.config.rrRatio);
+                    tp2 = this.getLiquidityPool('long');
+                } else {
+                    stopLoss = sweepLevel + riskBuffer;
+                    const risk = stopLoss - entry;
+                    tp1 = entry - (risk * this.config.rrRatio);
+                    tp2 = this.getLiquidityPool('short');
+                }
+                
+                this.smcAnalysis.tradeParams = {
+                    entry: entry,
+                    stopLoss: stopLoss,
+                    tp1: tp1,
+                    tp2: tp2
+                };
+            }
+
+            getLiquidityPool(direction) {
+                if (this.candlesM1.length < this.config.lookbackPool) return null;
+                
+                const recentCandles = this.candlesM1.slice(-this.config.lookbackPool);
+                
+                if (direction === 'long') {
+                    return Math.max(...recentCandles.map(c => c.high));
+                } else {
+                    return Math.min(...recentCandles.map(c => c.low));
+                }
+            }
+
+            updateDashboard() {
+                // Mise à jour du prix
+                this.updatePrice();
+                
+                // Mise à jour de l'analyse M15
+                this.updateM15Analysis();
+                
+                // Mise à jour du sweep
+                this.updateSweepStatus();
+                
+                // Mise à jour du signal
+                this.updateSignalDisplay();
+                
+                // Mise à jour des paramètres de trade
+                this.updateTradeParams();
+            }
+
+            updatePrice() {
+                const priceElement = document.getElementById('currentPrice');
+                const changeElement = document.getElementById('priceChange');
+                
+                if (priceElement) {
+                    priceElement.textContent = `$${this.currentPrice.toFixed(2)}`;
+                }
+                
+                if (changeElement) {
+                    const change = this.currentPrice - this.previousPrice;
+                    const changePercent = (change / this.previousPrice) * 100;
+                    
+                    changeElement.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)} (${changePercent.toFixed(2)}%)`;
+                    changeElement.className = `price-change ${change >= 0 ? 'positive' : 'negative'}`;
+                }
+            }
+
+            updateM15Analysis() {
+                const trendElement = document.getElementById('m15Trend');
+                const structureElement = document.getElementById('m15Structure');
+                
+                if (trendElement) {
+                    trendElement.textContent = this.smcAnalysis.m15Trend.charAt(0).toUpperCase() + this.smcAnalysis.m15Trend.slice(1);
+                    trendElement.className = `kpi-value ${this.smcAnalysis.m15Trend}`;
+                }
+                
+                if (structureElement) {
+                    structureElement.textContent = this.smcAnalysis.m15Structure;
+                }
+            }
+
+            updateSweepStatus() {
+                const statusElement = document.getElementById('sweepStatus');
+                const typeElement = document.getElementById('sweepType');
+                const levelElement = document.getElementById('sweepLevel');
+                
+                if (statusElement) {
+                    const status = this.smcAnalysis.sweepStatus === 'detected' ? 'Détecté' : 'En attente';
+                    statusElement.textContent = status;
+                    statusElement.className = `kpi-value ${this.smcAnalysis.sweepStatus === 'detected' ? 'bullish' : 'neutral'}`;
+                }
+                
+                if (typeElement) {
+                    typeElement.textContent = this.smcAnalysis.sweepType || '-';
+                }
+                
+                if (levelElement) {
+                    levelElement.textContent = this.smcAnalysis.sweepLevel ? `$${this.smcAnalysis.sweepLevel.toFixed(2)}` : '-';
+                }
+            }
+
+            updateSignalDisplay() {
+                const signalElement = document.getElementById('currentSignal');
+                const confidenceElement = document.getElementById('signalConfidence');
+                
+                if (signalElement) {
+                    let displayText = 'Aucun signal actif';
+                    let className = 'signal-display none';
+                    
+                    if (this.smcAnalysis.currentSignal === 'long') {
+                        displayText = '🚀 SIGNAL LONG';
+                        className = 'signal-display long';
+                    } else if (this.smcAnalysis.currentSignal === 'short') {
+                        displayText = '📉 SIGNAL SHORT';
+                        className = 'signal-display short';
+                    }
+                    
+                    signalElement.textContent = displayText;
+                    signalElement.className = className;
+                }
+                
+                if (confidenceElement) {
+                    confidenceElement.textContent = `${this.smcAnalysis.confidence}%`;
+                }
+            }
+
+            updateTradeParams() {
+                const elements = {
+                    entry: document.getElementById('tradeEntry'),
+                    stopLoss: document.getElementById('tradeStopLoss'),
+                    tp1: document.getElementById('tradeTp1'),
+                    tp2: document.getElementById('tradeTp2')
+                };
+                
+                Object.keys(elements).forEach(key => {
+                    if (elements[key]) {
+                        const value = this.smcAnalysis.tradeParams[key];
+                        elements[key].textContent = value ? `$${value.toFixed(2)}` : '-';
+                    }
+                });
+            }
+
+            updateConnectionStatus(text, status) {
+                const statusElement = document.getElementById('connectionStatus');
+                if (statusElement) {
+                    const dot = statusElement.querySelector('.status-dot');
+                    const textElement = statusElement.querySelector('.status-text');
+                    
+                    if (textElement) {
+                        textElement.textContent = text;
+                    }
+                    
+                    if (dot) {
+                        dot.className = `status-dot ${status}`;
+                    }
+                }
+            }
+
+            log(message, type = 'info') {
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry ${type}`;
+                logEntry.textContent = `[${timestamp}] ${message}`;
+                
+                const container = document.getElementById('logsContainer');
+                if (container) {
+                    container.appendChild(logEntry);
+                    container.scrollTop = container.scrollHeight;
+                    
+                    // Garder seulement les 50 derniers logs
+                    while (container.children.length > 50) {
+                        container.removeChild(container.firstChild);
+                    }
+                }
+                
+                console.log(`[${timestamp}] ${message}`);
+            }
+
+            destroy() {
+                if (this.websocket) {
+                    this.websocket.close();
+                }
+                if (this.updateInterval) {
+                    clearInterval(this.updateInterval);
+                }
+                if (this.analysisInterval) {
+                    clearInterval(this.analysisInterval);
+                }
+            }
+        }
+
+        // Initialisation de l'application
+        let smcBot;
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            smcBot = new SMCTradingBot();
+        });
+
+        // Nettoyage lors de la fermeture
+        window.addEventListener('beforeunload', () => {
+            if (smcBot) {
+                smcBot.destroy();
+            }
+        });
+    </script>
 </body>
 </html>
